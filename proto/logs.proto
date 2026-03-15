@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package veltrix.logs;
+
+option go_package = "veltrix/proto/logspb";
+
+service LogsService {
+
+  rpc StreamExecutionLogs(StreamLogsRequest)
+      returns (stream LogEvent);
+
+}
+
+
+message StreamLogsRequest {
+
+  string execution_id = 1;
+
+}
+
+
+message LogEvent {
+
+  string execution_id = 1;
+
+  string timestamp = 2;
+
+  string stream = 3;
+
+  string message = 4;
+
+}

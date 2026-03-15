@@ -1,197 +1,454 @@
+﻿# Veltrix
 
-# TaskForge — Event-Driven Distributed Execution Platform (v1)
+Veltrix is a distributed, event-driven execution platform for running short-lived user functions at scale with strong isolation and high concurrency.
 
+The platform supports:
+- function upload and version management
+- trigger execution
+- replay execution
+- cancel execution
+- real-time log streaming
 
+Veltrix is built as an infrastructure engineering project inspired by serverless and worker-based systems. The focus is on distributed systems design, control-plane/data-plane separation, event-driven communication, and runtime isolation.
 
-TaskForge is an **event-driven, distributed execution platform** designed to explore and validate core systems concepts such as **scheduling, concurrency, and service-to-service communication**.
+## Architecture
 
-The current version (**v1**) focuses on **architectural correctness, controlled concurrency, and gRPC-based coordination**, intentionally keeping the execution layer simple while establishing a strong foundation for **future runtime isolation and multi-language execution**.
+![Veltrix System Architecture](./architecture_digrams/ArchitectureDigram(system%20design).png)
 
+## Design Principles
 
-This project is **not a finished product** — it is a **foundational scaffold / architectural skeleton** designed to evolve into a full-fledged serverless runtime.
+### 1. Control Plane vs Data Plane
 
----
+Control Plane:
+- API Gateway
+- Scheduler Service
 
-## 🚀 What TaskForge Solves
+Responsibilities:
+- request validation and orchestration
+- execution lifecycle management
+- metadata persistence
+- scheduling and dispatch decisions
 
-- Accepts function execution requests from users
-- Schedules work across multiple workers
-- Executes tasks concurrently
-- Streams results back reliably
-- Scales horizontally by adding workers
+Data Plane:
+- Worker Service
+- Runtime Containers (Python / Node / Go)
 
-All of this is done using **Go, gRPC, goroutines, and event-driven design**.
+Responsibilities:
+- execution processing
+- process spawning and isolation
+- log capture and streaming
+- final execution result production
 
----
+### 2. Event-Driven Communication
 
-## 🧱 High-Level Architecture (v1)
- 
-![TaskForge v1 Architecture](./architecture_digrams/taskforge-v1-architecture.png)
+Kafka is the event backbone connecting services asynchronously and enabling decoupled scaling.
 
-### Core Components
+### 3. Runtime Isolation
 
-#### 1. API Gateway (Node.js)
-- Exposes HTTP APIs for users
-- Translates HTTP → gRPC
-- Decodes binary execution output into JSON
-- Acts as the system’s external interface
+User code executes in isolated child processes inside language runtime containers, not inside control-plane services.
 
-#### 2. Scheduler Service (Go + gRPC)
-- Central coordination layer
-- Accepts execution requests from Gateway
-- Tracks connected workers and their load
-- Dispatches work using **least-loaded scheduling**
-- Maintains execution state
-- Communicates with workers via **bidirectional gRPC streams**
+## High-Level Flow
 
-#### 3. Worker Service (Go)
-- Connects to Scheduler as a **client**
-- Maintains a **worker pool (goroutines)**
-- Executes jobs concurrently
-- Streams execution results back to Scheduler
-- Periodically sends **heartbeats** to report load
+Client
+-> API Gateway
+-> Scheduler Service
+-> Kafka (execution-jobs)
+-> Worker Service
+-> Runtime Containers
+-> Kafka (execution-events + execution-logs)
+-> Logs Service
+-> API Gateway (SSE)
+-> Client
 
----
+Supporting systems:
+- MongoDB for metadata/state
+- MinIO for code storage
+- Redis for worker-side code cache
 
-## 🔄 Execution Flow (v1)
+## Core Services
 
-1. User registers a function via Gateway
-2. User triggers execution
-3. Scheduler:
-   - Creates an execution record
-   - Selects the least-loaded worker
-   - Streams execution request
-4. Worker:
-   - Queues job
-   - Executes inside goroutine pool
-   - Sends result back
-5. Scheduler updates execution state
-6. Gateway exposes execution status & output
+### API Gateway (Node.js)
 
----
+Responsibilities:
+- REST API surface
+- auth and validation
+- function and execution endpoints
+- gRPC client calls to Scheduler and Logs services
+- SSE bridge for log streaming
 
-## ⚙️ Concurrency Model
+Gateway never executes user code.
 
-TaskForge uses **multi-layer concurrency**:
+### Scheduler Service (Go)
 
-### System-Level Concurrency
-- Achieved by running **multiple worker processes**
-- Scheduler distributes work across workers
+Responsibilities:
+- accept execution commands from Gateway
+- create execution records in MongoDB
+- publish execution jobs to Kafka
+- process replay/cancel requests
+- consume execution lifecycle events and update execution state
+
+Scheduler is control-plane orchestration only.
+
+### Worker Service (Go)
+
+Responsibilities:
+- consume execution jobs from Kafka
+- coordinate execution lifecycle with worker pool goroutines
+- retrieve code from Redis/MinIO
+- stream runtime logs
+- publish execution events and logs to Kafka
+
+Worker orchestrates execution but does not run user code directly.
+
+### Logs Service (Go)
+
+Responsibilities:
+- consume execution logs stream/events
+- provide gRPC log stream per execution
+- support Gateway SSE bridge to clients
+
+### Runtime Containers (Python / Node / Go)
+
+Responsibilities:
+- receive execution requests over gRPC
+- spawn isolated child processes
+- enforce runtime limits
+- stream stdout/stderr
+- return final result
+- cleanup execution artifacts
+
+## Kafka Topics
+
+- `execution-jobs`: Scheduler -> Worker
+- `execution-events`: Worker -> Scheduler
+- `execution-logs`: Worker -> Logs Service
+
+This model enables async scheduling, service decoupling, and horizontal scale.
+
+## Execution Lifecycle
+
+1. User triggers execution via Gateway.
+2. Scheduler creates execution record (MongoDB).
+3. Scheduler publishes job (`execution-jobs`).
+4. Worker consumes job and prepares execution snapshot.
+5. Worker invokes runtime container over gRPC stream.
+6. Runtime executes in isolated child process.
+7. Logs stream back and are published to Kafka.
+8. Worker publishes lifecycle event.
+9. Scheduler consumes event and updates execution state.
+10. Logs are streamed to client through Logs Service -> Gateway SSE.
+
+## Concurrency Model
 
 ### Worker-Level Concurrency
-- Each worker runs a **goroutine pool**
-- Configurable pool size
-- Non-blocking execution
 
-**Total concurrency = (number of workers) × (worker pool size)**
+Each worker instance processes jobs via a goroutine pool.
 
----
+### Runtime-Level Concurrency
 
-## 📦 Data Storage (v1)
+Each execution runs as an OS process inside runtime containers.
 
-Current storage is intentionally simple:
+This two-layer approach provides throughput and isolation together.
 
-- Functions → JSON files
-- Executions → JSON files
-- Stored on local filesystem
+## Isolation and Security
 
-This choice allows:
-- Easy debugging
-- Zero external dependencies
-- Focus on architecture, not persistence
+Execution safety model includes:
+- non-root runtime containers
+- execution timeout controls
+- CPU and memory limits
+- process count limits
+- isolated working directories
+- process group termination
+- bounded log output
+- temporary file cleanup
 
----
+## Scalability Strategy
 
-## 🧠 Why This Design (v1 Goals)
+### Horizontal Scale
 
-The goal of v1 is **NOT** to:
-- Run arbitrary untrusted code safely
-- Support multiple languages
-- Be production-ready
+Add more worker service instances. Kafka partitions distribute jobs across consumers.
 
-The goal **IS** to:
-- Prove the event-driven architecture
-- Validate gRPC streaming
-- Handle real concurrency
-- Build a scalable control plane
-- Create a solid base for future execution engines
+### Vertical Scale
 
----
+Increase worker pool size per worker instance to raise parallelism.
 
-## 🚧 Known Limitations (v1)
+## Current Direction
 
-- No sandboxing
-- No isolation between executions
-- JSON-based persistence
-- No retries or failure recovery
-- No execution timeouts
-- No autoscaling
+Veltrix is focused on building a robust execution infrastructure, not just a code runner. The project emphasizes:
+- distributed control-plane reliability
+- event-driven consistency
+- runtime process isolation
+- high-concurrency execution pipelines
 
-These are **intentional trade-offs**.
+## Future Enhancements
 
----
+- advanced sandboxing
+- retry policies and DLQs
+- resource-aware scheduling
+- per-runtime worker pools
+- metrics and observability
+- distributed tracing
+- autoscaling
+- multi-tenant quotas
 
-## 🔮 Roadmap (Future Versions)
+## Local Run Checklist
 
-### v2 — Containerized Execution
-- Use **Docker** to execute functions
-- Each execution runs in an isolated container
-- Support multiple languages (Go, Python, JS, etc.)
-- Workers become container orchestrators
+Use this checklist to start Veltrix locally in a stable order.
 
-### v3 — Queue-Based Scheduling
-- Introduce **Redis / message queues**
-- Decouple scheduling from execution
-- Enable buffering, retries, and backpressure
-- Improve fault tolerance
+1. Start infrastructure services:
+- MongoDB
+- Kafka (+ Zookeeper if your setup needs it)
+- MinIO
+- Redis
 
-### v4 — Persistent Storage
-- Replace JSON files with **MongoDB**
-- Durable execution history
-- Scalable metadata storage
+2. Confirm scheduler env is configured:
+- `scheduler_service/.env`
+- required keys:
+  - `SCHEDULER_GRPC_PORT`
+  - `MONGO_URI`
+  - `MONGO_DB_NAME`
+  - `KAFKA_BROKERS`
+  - `KAFKA_TOPIC`
 
-### v5 — Production Features
-- Execution timeouts
-- Cancellation
-- Retry policies
-- Priority queues
-- Autoscaling workers
-- Metrics & observability
+3. Generate Go protobufs:
+- from repo root: `make protos`
+- output should exist under `proto_gen/go`
 
----
+4. Install dependencies per service:
+- `gateway_service` -> `npm install`
+- `scheduler_service` -> `go mod tidy` (if needed)
+- `logs_service` -> `go mod tidy` (if needed)
 
-## 🧪 Current State of the Project
+5. Start services:
+- Scheduler Service (Go)
+- Logs Service (Go)
+- API Gateway (Node.js)
+- Worker Service (Go) when worker flow is ready
 
-> TaskForge is currently an **architectural skeleton / foundational implementation**.
+6. Verify control-plane connectivity:
+- Gateway can call Scheduler gRPC (`SCHEDULER_GRPC_ADDR`)
+- Gateway can stream logs from Logs gRPC (`LOGS_GRPC_ADDR`)
 
-It is intentionally minimal, but:
-- Architecturally sound
-- Horizontally scalable
-- Concurrency-safe
-- Ready to evolve
+7. Run functional smoke checks:
+- register/login
+- create function + upload code
+- trigger execution
+- replay execution
+- cancel execution
+- stream logs over SSE
 
----
+8. Validate event pipeline:
+- `execution-jobs` receives scheduler jobs
+- `execution-events` updates scheduler execution states
+- `execution-logs` feeds logs service streams
 
-## 🛠 Tech Stack
+## Quick Start (Copy-Paste)
 
-- **Go** — Scheduler & Worker services
-- **Node.js** — API Gateway
-- **gRPC** — Service-to-service communication
-- **Protocol Buffers** — Contracts
-- **Goroutines & Channels** — Concurrency
-- **JSON (filesystem)** — Temporary persistence
+### 1) Infrastructure (Mongo, Kafka, MinIO, Redis)
 
----
+If your `docker-compose.yml` already defines these services:
 
-## 📌 Key Takeaway
+```bash
+docker compose up -d
+```
 
-TaskForge v1 proves that:
-- Serverless systems are fundamentally **event-driven**
-- gRPC streaming is powerful for control planes
-- Concurrency ≠ request count
-- Horizontal scaling starts with architecture, not infrastructure
+If you use service-specific names, bring those up accordingly.
 
----
+### 2) Environment Files
 
+Create/update `scheduler_service/.env`:
 
+```bash
+cat > scheduler_service/.env <<'EOF'
+SCHEDULER_GRPC_PORT=50051
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=veltrix
+KAFKA_BROKERS=localhost:9092
+KAFKA_TOPIC=execution-jobs
+EOF
+```
 
+Create/update `gateway_service/.env`:
+
+```bash
+cat > gateway_service/.env <<'EOF'
+PORT=3000
+MONGO_URI=mongodb://localhost:27017/veltrix
+
+JWT_ACCESS_SECRET=replace-with-strong-access-secret
+JWT_REFRESH_SECRET=replace-with-strong-refresh-secret
+ACCESS_TOKEN_TTL=15m
+REFRESH_TOKEN_TTL=7d
+COOKIE_SECURE=false
+
+SCHEDULER_GRPC_ADDR=localhost:50051
+LOGS_GRPC_ADDR=localhost:50052
+
+MINIO_ENDPOINT=localhost
+MINIO_PORT=9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=taskforge-code
+MINIO_USE_SSL=false
+EOF
+```
+
+Optional `logs_service/.env` (if your logs service reads env):
+
+```bash
+cat > logs_service/.env <<'EOF'
+LOGS_GRPC_PORT=50052
+KAFKA_BROKERS=localhost:9092
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=veltrix
+EOF
+```
+
+### 3) Generate Protos (Go)
+
+From repo root:
+
+```bash
+make protos
+```
+
+`proto_gen` is not committed to git.  
+You must run this before building/running services that import protobuf Go packages.
+
+If `make` is unavailable, use:
+
+```bash
+bash scripts/generate_protos.sh
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/generate_protos.ps1
+```
+
+### 4) Install Dependencies
+
+```bash
+# gateway
+cd gateway_service && npm install && cd ..
+
+# scheduler
+cd scheduler_service && go mod tidy && cd ..
+
+# logs
+cd logs_service && go mod tidy && cd ..
+```
+
+### 5) Run Services
+
+Open separate terminals:
+
+```bash
+# terminal 1
+cd scheduler_service
+go run ./cmd/scheduler
+```
+
+```bash
+# terminal 2
+cd logs_service
+go run ./cmd/logs
+```
+
+```bash
+# terminal 3
+cd gateway_service
+npm start
+```
+
+### 6) API Endpoints
+
+Base URL:
+
+```bash
+export BASE_URL=http://localhost:3000
+```
+
+Auth:
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+
+Functions:
+- `POST /functions`
+- `PUT /functions/:id`
+- `GET /functions`
+- `GET /functions/:id`
+- `DELETE /functions/:id`
+
+Executions:
+- `POST /executions/:functionId`
+- `POST /executions/:executionId/replay`
+- `POST /executions/:executionId/cancel`
+- `GET /executions/:executionId`
+- `GET /executions/function/:functionId`
+- `GET /executions/:executionId/logs` (SSE)
+
+### 7) Smoke Test Commands
+
+Register:
+
+```bash
+curl -X POST "$BASE_URL/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com","password":"password123","role":"USER"}'
+```
+
+Login (stores httpOnly cookies in `cookies.txt`):
+
+```bash
+curl -i -c cookies.txt -X POST "$BASE_URL/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com","password":"password123"}'
+```
+
+Current user:
+
+```bash
+curl -b cookies.txt "$BASE_URL/auth/me"
+```
+
+Create function (multipart upload):
+
+```bash
+curl -b cookies.txt -X POST "$BASE_URL/functions" \
+  -F "name=image-resizer" \
+  -F "language=python" \
+  -F "file=@./sample.py"
+```
+
+Trigger execution:
+
+```bash
+curl -b cookies.txt -X POST "$BASE_URL/executions/<functionId>" \
+  -H "Content-Type: application/json" \
+  -d '{"inputPayload":{"hello":"world"}}'
+```
+
+Replay execution:
+
+```bash
+curl -b cookies.txt -X POST "$BASE_URL/executions/<executionId>/replay" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Cancel execution:
+
+```bash
+curl -b cookies.txt -X POST "$BASE_URL/executions/<executionId>/cancel" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+SSE logs stream:
+
+```bash
+curl -N -b cookies.txt "$BASE_URL/executions/<executionId>/logs"
+```

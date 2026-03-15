@@ -1,4 +1,4 @@
-module veltrix/worker_service
+module veltrix/logs_service
 
 go 1.24.0
 
@@ -15,4 +15,4 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace veltrix/proto => ../proto_gen/go/veltrix/proto
+replace veltrix/proto => ../proto_gen/go

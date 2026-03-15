@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package veltrix.events;
+option go_package = "veltrix/proto/eventspb";
+
+message ExecutionLog {
+
+  string execution_id = 1;
+
+  string timestamp = 2;
+
+  string stream = 3;
+
+  string message = 4;
+
+}

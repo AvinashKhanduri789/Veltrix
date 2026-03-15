@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package veltrix.events;
+option go_package = "veltrix/proto/eventspb";
+
+message ExecutionJob {
+
+  string execution_id = 1;
+
+  string user_id = 2;
+
+  string function_id = 3;
+
+  string version_id = 4;
+
+  string code_storage_path = 5;
+
+  string runtime = 6;
+
+  string input_payload = 7;
+
+  int32 timeout_seconds = 8;
+
+}

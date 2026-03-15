@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Local env files
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Generated protobuf output (regenerate locally)
+proto_gen/
+
+# Research / docs scratch area
+RND/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs and temp files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build/test coverage artifacts
+coverage/
+**/coverage/
+dist/
+build/
+.tmp/
+tmp/

@@ -1,21 +1,28 @@
-{
-  "name": "gateway_service",
-  "version": "1.0.0",
-  "main": "index.js",
-  "type": "module",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon ./index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "@grpc/grpc-js": "^1.14.3",
-    "@grpc/proto-loader": "^0.8.0",
-    "body-parser": "^2.2.2",
-    "express": "^5.2.1",
-    "nodemon": "^3.1.11"
-  }
+﻿{
+    "name": "gateway_service",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" \u0026\u0026 exit 1",
+        "start": "nodemon ./index.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "dependencies": {
+        "@grpc/grpc-js": "^1.14.3",
+        "@grpc/proto-loader": "^0.8.0",
+        "body-parser": "^2.2.2",
+        "express": "^5.2.1",
+        "mongoose": "^9.2.3",
+        "nodemon": "^3.1.11",
+        "joi": "^17.13.3",
+        "dotenv": "^16.5.0",
+        "cookie-parser": "^1.4.7",
+        "jsonwebtoken": "^9.0.2",
+        "minio": "^8.0.6",
+        "multer": "^1.4.5-lts.1"
+    }
 }

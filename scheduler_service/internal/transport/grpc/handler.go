@@ -8,6 +8,7 @@ import (
 	"veltrix/scheduler_service/internal/services"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"veltrix/scheduler_service/internal/constants"
 )
 
 type SchedulerHandler struct {
@@ -30,7 +31,7 @@ func (h *SchedulerHandler) TriggerExecution(ctx context.Context, req *pb.Trigger
 
 	return &pb.TriggerExecutionResponse{
 		ExecutionId: executionID,
-		Status:      "QUEUED",
+		Status:      "PENDING",
 	}, nil
 }
 
@@ -70,6 +71,6 @@ func (h *SchedulerHandler) ReplayExecution(ctx context.Context, req *pb.ReplayEx
 
 	return &pb.ReplayExecutionResponse{
 		NewExecutionId: newExecutionID,
-		Status:         "QUEUED",
+		Status:        constants.StatusQueued ,
 	}, nil
 }

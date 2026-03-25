@@ -97,13 +97,13 @@ export async function triggerExecution(req, res) {
     const codeUrl = await getPresignedCodeUrl(functionVersion.codeStoragePath);
 
     const executionRequestPayload = {
-      userId,
-      functionId,
-      functionVersionId: functionVersion._id.toString(),
-      codeUrl,
-      runtimeVersion: functionVersion.runtimeVersion,
-      containerImageTag: functionVersion.containerImageTag,
-      inputPayload,
+      user_id: userId,
+      function_id: functionId,
+      version_id: functionVersion._id.toString(),
+      code_storage_path: functionVersion.codeStoragePath,
+      runtime: functionVersion.runtimeVersion,
+      input_payload: JSON.stringify(inputPayload),
+      timeout_seconds: 30,
     };
 
     let schedulerResponse;
@@ -175,11 +175,9 @@ export async function replayExecution(req, res) {
     const inputPayload = overrideInputPayload ?? originalExecution.inputPayload ?? {};
 
     const replayRequestPayload = {
-      userId: userId.toString(),
-      functionId: originalExecution.functionId.toString(),
-      functionVersionId: originalExecution.functionVersionId.toString(),
-      inputPayload,
-      replayOf: executionId,
+      execution_id: executionId,
+      user_id: userId.toString(),
+      input_override: JSON.stringify(inputPayload),
     };
 
     let schedulerResponse;
@@ -254,8 +252,8 @@ export async function cancelExecution(req, res) {
     }
 
     const cancelRequestPayload = {
-      executionId: execution._id.toString(),
-      userId: userId.toString(),
+      execution_id: execution._id.toString(),
+      user_id: userId.toString(),
     };
 
     try {

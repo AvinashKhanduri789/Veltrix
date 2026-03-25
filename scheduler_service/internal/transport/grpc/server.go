@@ -11,7 +11,7 @@ import (
 
 type GrpcServer struct {
 	port    int
-	handler pb.SchedulerServiceServer
+	handler pb.SchedulerServiceServer  
 }
 
 func NewGrpcServer(port int, handler pb.SchedulerServiceServer) *GrpcServer {

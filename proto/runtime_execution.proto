@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package veltrix.runtime;
+
+option go_package = "veltrix/proto/runtimepb";
+
+service RuntimeExecutionService {
+
+  rpc ExecuteExecution(stream ExecutionRequest)
+      returns (stream ExecutionResponse);
+}
+
+message ExecutionRequest {
+
+  oneof payload {
+    ExecutionStart start = 1;
+    ExecutionCancel cancel = 2;
+  }
+}
+
+message ExecutionResponse {
+
+  oneof payload {
+    ExecutionLog log = 1;
+    ExecutionResult result = 2;
+  }
+}
+
+message ExecutionStart {
+
+  string execution_id = 1;
+
+  string user_id = 2;
+
+  string function_id = 3;
+
+  string version_id = 4;
+
+  string runtime = 5;
+
+  string input_payload = 6;
+
+  int32 timeout_seconds = 7;
+
+  int32 memory_limit_mb = 8;
+
+  bytes code_bundle = 9;
+}
+
+message ExecutionCancel {
+
+  string execution_id = 1;
+}
+
+message ExecutionLog {
+
+  string execution_id = 1;
+
+  string message = 2;
+
+  LogType type = 3;
+
+  string timestamp = 4;
+}
+
+message ExecutionResult {
+
+  string execution_id = 1;
+
+  ExecutionStatus status = 2;
+
+  int32 exit_code = 3;
+
+  string output = 4;
+
+  string error_message = 5;
+
+  int64 duration_ms = 6;
+}
+
+enum LogType {
+  LOG_TYPE_UNSPECIFIED = 0;
+  STDOUT = 1;
+  STDERR = 2;
+}
+
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_SUCCESS = 1;
+  EXECUTION_FAILED = 2;
+  EXECUTION_TIMEOUT = 3;
+  EXECUTION_CANCELLED = 4;
+}

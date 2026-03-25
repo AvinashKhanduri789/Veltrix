@@ -17,14 +17,13 @@ import (
 	"veltrix/scheduler_service/internal/domain"
 	"veltrix/scheduler_service/internal/kafka"
 	"veltrix/scheduler_service/internal/repository"
-	creationsvc "veltrix/scheduler_service/internal/service"
 )
 
 type SchedulerService struct {
 	executionRepo    *repository.ExecutionRepository
 	versionRepo      *repository.VersionRepository
 	producer         *kafka.Producer
-	executionCreator *creationsvc.ExecutionService
+	executionCreator *ExecutionService
 }
 
 func NewSchedulerService(
@@ -36,7 +35,7 @@ func NewSchedulerService(
 		executionRepo:    executionRepo,
 		versionRepo:      versionRepo,
 		producer:         producer,
-		executionCreator: creationsvc.NewExecutionService(executionRepo, producer),
+		executionCreator: NewExecutionService(executionRepo, producer),
 	}
 }
 
@@ -46,6 +45,10 @@ func (s *SchedulerService) TriggerExecution(ctx context.Context, req *schedulerp
 
 func (s *SchedulerService) ReplayExecution(ctx context.Context, req *schedulerpb.ReplayExecutionRequest) (string, error) {
 	previousExecutionID, err := primitive.ObjectIDFromHex(req.ExecutionId)
+
+	if req.ExecutionId==""{
+		return "",fmt.Errorf("Invalid ExecutionId")
+	}
 	if err != nil {
 		return "", fmt.Errorf("invalid execution id: %w", err)
 	}
@@ -109,7 +112,8 @@ func (s *SchedulerService) ReplayExecution(ctx context.Context, req *schedulerpb
 	}
 
 	if err := s.producer.PublishExecutionJob(ctx, job); err != nil {
-		return "", err
+		_ = s.executionRepo.UpdateExecutionStatus(ctx, newExecution.ID, "FAILED")
+		return "", fmt.Errorf("publish execution job: %w", err)
 	}
 
 	return newExecution.ID.Hex(), nil

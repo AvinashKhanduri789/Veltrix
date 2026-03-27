@@ -3,6 +3,11 @@ syntax = "proto3";
 package veltrix.events;
 option go_package = "veltrix/proto/eventspb";
 
+enum JobType {
+  RUN = 0;
+  CANCEL = 1;
+}
+
 message ExecutionJob {
 
   string execution_id = 1;
@@ -20,5 +25,7 @@ message ExecutionJob {
   string input_payload = 7;
 
   int32 timeout_seconds = 8;
+
+  JobType job_type = 9;
 
 }

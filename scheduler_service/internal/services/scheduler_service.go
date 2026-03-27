@@ -137,7 +137,7 @@ func (s *SchedulerService) CancelExecution(ctx context.Context, req *schedulerpb
 		return fmt.Errorf("execution status is not cancellable")
 	}
 
-	return s.producer.PublishExecutionCancel(ctx, execution.ID.Hex(), req.UserId)
+	return s.producer.PublishExecutionCancel(ctx, execution.ID.Hex())
 }
 
 func (s *SchedulerService) HandleExecutionEvent(ctx context.Context, event *eventspb.ExecutionEvent) error {

@@ -26,8 +26,13 @@ func NewConsumer(brokers []string, topic string, groupID string) *Consumer {
 }
 
 func (c *Consumer) Start(ctx context.Context, handler func(event *eventspb.ExecutionEvent) error) {
+	
 	for {
-		msg, err := c.reader.ReadMessage(ctx)
+		// msg, err := c.reader.ReadMessage(ctx)
+		// If consumer groups are used, ReadMessage will automatically commit the offset when called. Note that this could result in an offset being committed before the message is fully processed.
+		// If more fine-grained control of when offsets are committed is required, it is recommended to use FetchMessage with CommitMessages instead.
+
+		msg, err := c.reader.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -42,15 +47,31 @@ func (c *Consumer) Start(ctx context.Context, handler func(event *eventspb.Execu
 			continue
 		}
 
+
 		if err := handler(&event); err != nil {
 			log.Printf("kafka consumer handler error: %v", err)
+			continue
 		}
+
+
+
+		if err := c.reader.CommitMessages(ctx, msg); err!=nil{
+			log.Printf("commit error :%v", err)
+		}
+		
+
 	}
 }
-
 func (c *Consumer) Close() error {
 	if c == nil || c.reader == nil {
 		return nil
 	}
-	return c.reader.Close()
+
+	if err := c.reader.Close(); err != nil {
+		log.Printf("failed to close kafka reader: %v", err)
+		return err
+	}
+
+	log.Println("kafka consumer closed")
+	return nil
 }

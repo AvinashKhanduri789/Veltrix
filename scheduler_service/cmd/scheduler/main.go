@@ -4,28 +4,38 @@ import (
 	"context"
 	"log"
 	"os"
-	"strconv"
+	"os/signal"
+	"syscall"
+
 	"veltrix/scheduler_service/internal/app"
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env only for local dev
 	if err := godotenv.Load(".env"); err != nil {
-		log.Printf("no .env loaded, using system environment: %v", err)
+		log.Println("no .env loaded, using system environment")
 	}
 
-	port := 50051
-	if rawPort := os.Getenv("SCHEDULER_GRPC_PORT"); rawPort != "" {
-		parsed, err := strconv.Atoi(rawPort)
-		if err != nil {
-			log.Fatalf("invalid SCHEDULER_GRPC_PORT: %v", err)
-		}
-		port = parsed
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		<-sigChan
+		log.Println("shutdown signal received")
+		cancel()
+	}()
 
 	log.Println("Starting Scheduler Service...")
-	if err := app.Run(context.Background(), port); err != nil {
+
+	if err := app.Run(ctx); err != nil {
 		log.Fatalf("failed to start scheduler app: %v", err)
 	}
+
+	log.Println("Scheduler stopped")
 }

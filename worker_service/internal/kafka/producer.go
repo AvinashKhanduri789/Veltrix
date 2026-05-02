@@ -2,22 +2,49 @@ package kafka
 
 import (
 	"context"
-	"time"
+	"veltrix/proto/eventspb"
 	kgo "github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
-	enventpb "veltrix/proto/eventspb"
 )
 
 
-type KafkaConsumer struct{
-	jobWrite *kgo.Writer
-	eventWriter *kgo.Writer
+type KafkaProducer struct{
+	producer *kgo.Writer
+}
+
+func NewKafkaProducer(brokerList []string  , topic string) (*KafkaProducer){
+	return &KafkaProducer{
+		producer : &kgo.Writer{
+			Addr:     kgo.TCP(brokerList...),
+			Topic:    topic,
+			Balancer: &kgo.LeastBytes{},
+		},
+	}
 }
 
 
-func (KafkaConsumer) NewKafkaConsumer(jr *kgo.WriteErrors , er *kgo.Writer) (*KafkaConsumer){
-	return &KafkaConsumer{
-		jr,
-		er,
+func (p *KafkaProducer) ProduceExecutionEvent(ctx context.Context,event *eventspb.ExecutionEvent ) error {
+	payload,err := proto.Marshal(event)
+
+	if err != nil{
+		return  err
 	}
+
+	return p.producer.WriteMessages(ctx, kgo.Message{
+		Key:   []byte(event.ExecutionId),
+		Value: payload,
+	})
+
+}
+
+func (p *KafkaProducer) ProduceExecutionJob(ctx context.Context, job *eventspb.ExecutionJob) error {
+	payload, err := proto.Marshal(job)
+	if err != nil {
+		return err
+	}
+
+	return p.producer.WriteMessages(ctx, kgo.Message{
+		Key:   []byte(job.ExecutionId),
+		Value: payload,
+	})
 }

@@ -28,4 +28,6 @@ message ExecutionJob {
 
   JobType job_type = 9;
 
+  int32 retry_count = 10;
+
 }

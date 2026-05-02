@@ -8,6 +8,7 @@ NODE_OUT_DIR="${ROOT_DIR}/proto_gen/node"
 
 SCHEDULER_PROTO="${PROTO_DIR}/scheduler.proto"
 LOGS_PROTO="${PROTO_DIR}/logs.proto"
+RUNTIME_EXECUTION_PROTO="${PROTO_DIR}/runtime_execution.proto"
 EVENT_PROTOS=(
   "${PROTO_DIR}/events/execution_job.proto"
   "${PROTO_DIR}/events/execution_event.proto"
@@ -38,7 +39,8 @@ protoc \
   --go-grpc_out="${GO_OUT_DIR}" \
   --go-grpc_opt=paths=import,module=veltrix/proto \
   "${SCHEDULER_PROTO}" \
-  "${LOGS_PROTO}"
+  "${LOGS_PROTO}" \
+  "${RUNTIME_EXECUTION_PROTO}"
 
 protoc \
   -I "${PROTO_DIR}" \

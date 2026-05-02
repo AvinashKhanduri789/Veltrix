@@ -8,6 +8,7 @@ $NodeOutDir = Join-Path $RootDir "proto_gen/node"
 
 $SchedulerProto = Join-Path $ProtoDir "scheduler.proto"
 $LogsProto = Join-Path $ProtoDir "logs.proto"
+$RuntimeExecutionProto = Join-Path $ProtoDir "runtime_execution.proto"
 $EventProtos = @(
   (Join-Path $ProtoDir "events/execution_job.proto"),
   (Join-Path $ProtoDir "events/execution_event.proto"),
@@ -58,7 +59,8 @@ $goServiceArgs = @(
   "--go-grpc_out=$GoOutDir",
   "--go-grpc_opt=paths=import,module=veltrix/proto",
   $SchedulerProto,
-  $LogsProto
+  $LogsProto,
+  $RuntimeExecutionProto
 )
 Invoke-CheckedCommand -Command "protoc" -Arguments $goServiceArgs
 

@@ -49,3 +49,16 @@ func (r *ExecutionRepository) UpdateExecutionFields(ctx context.Context, id prim
 	)
 	return err
 }
+
+func (r *ExecutionRepository) UpdateExecutionWithFilter(
+	ctx context.Context,
+	filter bson.M,
+	update bson.M,
+) (*mongo.UpdateResult, error) {
+
+	return r.collection.UpdateOne(
+		ctx,
+		filter,
+		bson.M{"$set": update},
+	)
+}

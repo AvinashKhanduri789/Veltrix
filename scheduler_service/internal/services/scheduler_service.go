@@ -46,8 +46,8 @@ func (s *SchedulerService) TriggerExecution(ctx context.Context, req *schedulerp
 func (s *SchedulerService) ReplayExecution(ctx context.Context, req *schedulerpb.ReplayExecutionRequest) (string, error) {
 	previousExecutionID, err := primitive.ObjectIDFromHex(req.ExecutionId)
 
-	if req.ExecutionId==""{
-		return "",fmt.Errorf("Invalid ExecutionId")
+	if req.ExecutionId == "" {
+		return "", fmt.Errorf("Invalid ExecutionId")
 	}
 	if err != nil {
 		return "", fmt.Errorf("invalid execution id: %w", err)
@@ -141,46 +141,108 @@ func (s *SchedulerService) CancelExecution(ctx context.Context, req *schedulerpb
 }
 
 func (s *SchedulerService) HandleExecutionEvent(ctx context.Context, event *eventspb.ExecutionEvent) error {
+
+	log.Printf("📩 EVENT RECEIVED executionId=%s type=%v error=%s",
+		event.ExecutionId,
+		event.EventType,
+		event.ErrorMessage,
+	)
+
 	executionID, err := primitive.ObjectIDFromHex(event.ExecutionId)
 	if err != nil {
-		return fmt.Errorf("invalid execution id in event: %w", err)
-	}
-
-	if _, err := s.executionRepo.GetExecutionByID(ctx, executionID); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return fmt.Errorf("execution not found: %s", event.ExecutionId)
-		}
-		return err
+		log.Printf("invalid execution id: %s", event.ExecutionId)
+		return fmt.Errorf("invalid execution id: %w", err)
 	}
 
 	now := time.Now()
-	fields := bson.M{}
+
+	update := bson.M{}
+	filter := bson.M{
+		"_id": executionID,
+	}
 
 	switch event.EventType {
+
 	case eventspb.ExecutionEventType_EXECUTION_STARTED:
-		fields["status"] = constants.StatusRunning
-		fields["startedAt"] = now
-		log.Printf("execution started: executionId=%s", event.ExecutionId)
+		log.Printf("processing STARTED event executionId=%s", event.ExecutionId)
+		filter["status"] = bson.M{
+			"$in": []string{
+				constants.StatusPending,
+				constants.StatusFailed,
+			},
+		}
+
+		update["status"] = constants.StatusRunning
+		update["startedAt"] = now
 
 	case eventspb.ExecutionEventType_EXECUTION_COMPLETED:
-		fields["status"] = constants.StatusSuccess
-		fields["completedAt"] = now
-		log.Printf("execution completed: executionId=%s", event.ExecutionId)
+
+		filter["status"] = constants.StatusRunning
+
+		update["status"] = constants.StatusSuccess
+		update["completedAt"] = now
+
+		if event.Output != "" {
+			update["output"] = event.Output
+		}
 
 	case eventspb.ExecutionEventType_EXECUTION_FAILED:
-		fields["status"] = constants.StatusFailed
-		fields["completedAt"] = now
-		fields["errorMessage"] = event.ErrorMessage
-		log.Printf("execution failed: executionId=%s", event.ExecutionId)
+		log.Printf("processing FAILED event executionId=%s", event.ExecutionId)
+
+		filter["status"] = bson.M{
+			"$in": []string{
+				constants.StatusPending,
+				constants.StatusRunning,
+			},
+		}
+		update["status"] = constants.StatusFailed
+		update["completedAt"] = now
+		update["errorMessage"] = event.ErrorMessage
 
 	case eventspb.ExecutionEventType_EXECUTION_CANCELLED:
-		fields["status"] = constants.StatusCancelled
-		fields["completedAt"] = now
-		log.Printf("execution cancelled: executionId=%s", event.ExecutionId)
+		log.Printf("processing CANCELLED event executionId=%s", event.ExecutionId)
+
+		filter["status"] = bson.M{
+			"$in": []string{
+				constants.StatusPending,
+				constants.StatusRunning,
+			},
+		}
+		update["status"] = constants.StatusCancelled
+		update["completedAt"] = now
 
 	default:
+		log.Printf(" unknown event type executionId=%s type=%v",
+			event.ExecutionId, event.EventType)
 		return nil
 	}
 
-	return s.executionRepo.UpdateExecutionFields(ctx, executionID, fields)
+	log.Printf("applying update executionId=%s filter=%v update=%v",
+		event.ExecutionId, filter, update,
+	)
+
+	res, err := s.executionRepo.UpdateExecutionWithFilter(ctx, filter, update)
+	if err != nil {
+		log.Printf("update failed executionId=%s err=%v",
+			event.ExecutionId, err)
+		return fmt.Errorf("failed to update execution %s: %w", event.ExecutionId, err)
+	}
+
+	if res.MatchedCount == 0 {
+		log.Printf(
+			" STATE MISMATCH executionId=%s event=%v filter=%v",
+			event.ExecutionId,
+			event.EventType,
+			filter,
+		)
+		return nil
+	}
+
+	log.Printf(
+		"execution updated executionId=%s event=%v",
+		event.ExecutionId,
+		event.EventType,
+	)
+
+	return nil
 }

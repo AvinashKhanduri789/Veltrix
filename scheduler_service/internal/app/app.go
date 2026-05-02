@@ -3,10 +3,10 @@ package app
 import (
 	"context"
 	"log"
-	"os"
-	"strings"
+	"time"
 
 	eventspb "veltrix/proto/eventspb"
+	"veltrix/scheduler_service/internal/config"
 	"veltrix/scheduler_service/internal/db"
 	"veltrix/scheduler_service/internal/kafka"
 	"veltrix/scheduler_service/internal/repository"
@@ -14,66 +14,88 @@ import (
 	transportgrpc "veltrix/scheduler_service/internal/transport/grpc"
 )
 
-func parseBrokers(raw string) []string {
-	if raw == "" {
-		return []string{"localhost:9092"}
-	}
+func Run(ctx context.Context) error {
 
-	parts := strings.Split(raw, ",")
-	brokers := make([]string, 0, len(parts))
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed != "" {
-			brokers = append(brokers, trimmed)
-		}
-	}
-	if len(brokers) == 0 {
-		return []string{"localhost:9092"}
-	}
-	return brokers
-}
+	cfg := config.Load()
 
-func Run(ctx context.Context, grpcPort int) error {
+	// =========================
+	// Mongo setup
+	// =========================
 	mongoStore, err := db.NewMongoStore(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = mongoStore.Close(context.Background())
-	}()
 
-	brokers := parseBrokers(os.Getenv("KAFKA_BROKERS"))
-	kafkaTopic := os.Getenv("KAFKA_TOPIC")
-	if kafkaTopic == "" {
-		kafkaTopic = "execution-jobs"
-	}
-
+	// =========================
+	//  Repositories
+	// =========================
 	executionRepo := repository.NewExecutionRepository(mongoStore.Database)
 	versionRepo := repository.NewVersionRepository(mongoStore.Database)
-	producer := kafka.NewProducer(brokers, kafkaTopic)
-	defer func() {
-		_ = producer.Close()
-	}()
 
-	schedulerService := services.NewSchedulerService(executionRepo, versionRepo, producer)
+	// =========================
+	//  Kafka Producer
+	// =========================
+	producer := kafka.NewProducer(cfg.KafkaBrokers, cfg.JobTopic)
 
-	consumer := kafka.NewConsumer(
-		brokers,
-		"execution-events",
-		"scheduler-service",
+	// =========================
+	//  Service Layer
+	// =========================
+	schedulerService := services.NewSchedulerService(
+		executionRepo,
+		versionRepo,
+		producer,
 	)
-	defer func() {
-		_ = consumer.Close()
+
+	// =========================
+	// Kafka Consumer (execution-events)
+	// =========================
+	consumer := kafka.NewConsumer(cfg.KafkaBrokers, cfg.EventTopic, cfg.GroupID)
+
+	go consumer.Start(
+		ctx,
+		func(event *eventspb.ExecutionEvent) error {
+			return schedulerService.HandleExecutionEvent(context.Background(), event)
+		},
+	)
+
+	// =========================
+	//  gRPC Server
+	// =========================
+	handler := transportgrpc.NewSchedulerHandler(schedulerService)
+	server := transportgrpc.NewGrpcServer(cfg.GRPCPort, handler)
+
+	go func() {
+		log.Printf("scheduler gRPC server started (port=%d)", cfg.GRPCPort)
+		server.Start()
 	}()
 
-	go consumer.Start(ctx, func(event *eventspb.ExecutionEvent) error {
-		return schedulerService.HandleExecutionEvent(ctx, event)
-	})
+	// =========================
+	// Wait for shutdown
+	// =========================
+	<-ctx.Done()
 
-	handler := transportgrpc.NewSchedulerHandler(schedulerService)
-	server := transportgrpc.NewGrpcServer(grpcPort, handler)
+	log.Println("shutting down scheduler service...")
 
-	log.Printf("scheduler app started (grpcPort=%d)", grpcPort)
-	server.Start()
+	// =========================
+	//  Cleanup
+	// =========================
+
+	if err := consumer.Close(); err != nil {
+		log.Printf("error closing consumer: %v", err)
+	}
+
+	if err := producer.Close(); err != nil {
+		log.Printf("error closing producer: %v", err)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := mongoStore.Close(shutdownCtx); err != nil {
+		log.Printf("error closing mongo: %v", err)
+	}
+
+	log.Println("scheduler service stopped cleanly")
+
 	return nil
 }

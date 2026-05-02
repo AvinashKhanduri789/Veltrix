@@ -14,6 +14,22 @@ function extractAccessToken(req) {
 
 function jwtAuth(req, res, next) {
   try {
+    if (process.env.DISABLE_AUTH === 'true') {
+      req.auth = {
+        userId: '507f1f77bcf86cd799439011', 
+        email: 'dev@test.com',
+        role: 'USER',
+      };
+
+      req.user = {
+        id: '507f1f77bcf86cd799439011',
+        email: 'dev@test.com',
+        role: 'USER',
+      };
+
+      return next();
+    }
+
     const token = extractAccessToken(req);
 
     if (!token) {

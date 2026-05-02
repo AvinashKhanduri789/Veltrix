@@ -5,7 +5,7 @@ import Function from '../../../models/Function.js';
 import FunctionVersion from '../../../models/FunctionVersion.js';
 import { sendError, sendSuccess } from '../../../utils/http/response.util.js';
 import { getPresignedCodeUrl } from '../../../utils/storage/minio.util.js';
-import logsClient from '../../grpc/logs.client.js';
+// import logsClient from '../../grpc/logs.client.js';
 import schedulerClient from '../../grpc/scheduler.client.js';
 
 const activeExecutionLogStreams = new Map();

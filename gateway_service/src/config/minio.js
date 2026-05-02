@@ -12,7 +12,7 @@ function getMinioClientConfig() {
 
   return {
     endPoint: endpoint,
-    port,
+    port: port || 9000,
     useSSL: process.env.MINIO_USE_SSL === 'true',
     accessKey,
     secretKey,

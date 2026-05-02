@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+
 	pb "veltrix/proto/schedulerpb"
 
 	"google.golang.org/grpc"
@@ -11,7 +12,7 @@ import (
 
 type GrpcServer struct {
 	port    int
-	handler pb.SchedulerServiceServer  
+	handler pb.SchedulerServiceServer
 }
 
 func NewGrpcServer(port int, handler pb.SchedulerServiceServer) *GrpcServer {
@@ -22,16 +23,18 @@ func NewGrpcServer(port int, handler pb.SchedulerServiceServer) *GrpcServer {
 }
 
 func (s *GrpcServer) Start() {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	addr := fmt.Sprintf("0.0.0.0:%d", s.port)
+
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("failed to listen on %s: %v", addr, err)
 	}
 
 	grpcServer := grpc.NewServer()
 
 	pb.RegisterSchedulerServiceServer(grpcServer, s.handler)
 
-	log.Printf("Scheduler gRPC server running on port %d", s.port)
+	log.Printf("Scheduler gRPC server running on %s", addr)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

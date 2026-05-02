@@ -4,24 +4,21 @@ package veltrix.events;
 option go_package = "veltrix/proto/eventspb";
 
 enum ExecutionEventType {
-
   EXECUTION_STARTED = 0;
   EXECUTION_COMPLETED = 1;
   EXECUTION_FAILED = 2;
   EXECUTION_CANCELLED = 3;
-
 }
 
 message ExecutionEvent {
-
   string execution_id = 1;
-
   string worker_id = 2;
 
   ExecutionEventType event_type = 3;
 
-  string timestamp = 4;
+  int64 timestamp = 4;
 
   string error_message = 5;
 
+  string output = 6; 
 }

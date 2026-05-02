@@ -20,7 +20,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 const schedulerProto = grpc.loadPackageDefinition(packageDefinition).veltrix.scheduler;
 
 const schedulerClient = new schedulerProto.SchedulerService(
-  process.env.SCHEDULER_GRPC_ADDR || 'localhost:50051',
+  process.env.SCHEDULER_GRPC_ADDR || 'scheduler:50051',
   grpc.credentials.createInsecure(),
 );
 

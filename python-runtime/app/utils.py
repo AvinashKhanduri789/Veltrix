@@ -3,7 +3,9 @@ import tempfile
 import shutil
 
 def create_workdir():
-    return tempfile.mkdtemp(prefix="exec_")
+    path = tempfile.mkdtemp(prefix="exec_")
+    os.chmod(path, 0o700)
+    return path
 
 def cleanup_workdir(path):
     shutil.rmtree(path, ignore_errors=True)

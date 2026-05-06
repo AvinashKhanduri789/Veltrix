@@ -1,0 +1,13 @@
+{
+  "name": "node-runtime",
+  "version": "1.0.0",
+  "main": "app/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node app/server.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0"
+  }
+}

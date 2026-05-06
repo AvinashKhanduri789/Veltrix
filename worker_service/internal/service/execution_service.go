@@ -9,6 +9,7 @@ import (
 	"time"
 
 	eventspb "veltrix/proto/eventspb"
+	logspb "veltrix/proto/logspb"
 	runtimepb "veltrix/proto/runtimepb"
 	"veltrix/worker_service/internal/codefetcher"
 	"veltrix/worker_service/internal/kafka"
@@ -28,7 +29,7 @@ type ExecutionService struct {
 
 	retryProducer *kafka.KafkaProducer
 	logsProducer  *kafka.KafkaProducer
-	eventProducer *kafka.KafkaProducer 
+	eventProducer *kafka.KafkaProducer
 }
 
 func NewExecutionService(
@@ -80,6 +81,11 @@ func (s *ExecutionService) HandleExecution(ctx context.Context, job *eventspb.Ex
 
 		log.Printf("execution error: executionId=%s err=%v", job.ExecutionId, err)
 
+		if strings.Contains(err.Error(), "execution-timeout") {
+			s.publishFailureEvent(ctx, job, "execution timeout")
+			return
+		}
+
 		if isInfraError(err) {
 			s.publishFailureEvent(ctx, job, "requested service not available")
 			return
@@ -98,13 +104,12 @@ func (s *ExecutionService) HandleExecution(ctx context.Context, job *eventspb.Ex
 	s.publishSuccessEvent(ctx, job, result)
 }
 
-// =========================
-// EXECUTION CORE
-// =========================
+
 
 func (s *ExecutionService) execute(parentCtx context.Context, job *eventspb.ExecutionJob) (string, error) {
 
-	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(job.TimeoutSeconds)*time.Second)
+	timeout := time.Duration(job.TimeoutSeconds)*time.Second + 5*time.Second
+	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 
 	// FETCH CODE
@@ -113,7 +118,7 @@ func (s *ExecutionService) execute(parentCtx context.Context, job *eventspb.Exec
 		return "", fmt.Errorf("code fetch failed: %w", err)
 	}
 
-	//  RUNTIME CLIENT
+	// RUNTIME CLIENT
 	client, err := s.router.GetClient(job.Runtime)
 	if err != nil {
 		return "", fmt.Errorf("unsupported runtime: %w", err)
@@ -125,7 +130,7 @@ func (s *ExecutionService) execute(parentCtx context.Context, job *eventspb.Exec
 	}
 	defer stream.CloseSend()
 
-	//  SEND REQUEST
+	// SEND REQUEST
 	req := &runtimepb.ExecutionRequest{
 		Payload: &runtimepb.ExecutionRequest_Start{
 			Start: &runtimepb.ExecutionStart{
@@ -157,8 +162,9 @@ func (s *ExecutionService) execute(parentCtx context.Context, job *eventspb.Exec
 		}
 
 		if err != nil {
+
 			if ctx.Err() == context.DeadlineExceeded {
-				return "", fmt.Errorf("timeout: %w", err)
+				return "", fmt.Errorf("worker-timeout: %w", err)
 			}
 
 			if _, ok := status.FromError(err); ok && isRetryable(err) {
@@ -171,17 +177,37 @@ func (s *ExecutionService) execute(parentCtx context.Context, job *eventspb.Exec
 		switch x := res.Payload.(type) {
 
 		case *runtimepb.ExecutionResponse_Log:
+
 			log.Printf("EXEC LOG [%s]: %s", job.ExecutionId, x.Log.Message)
+
+			_ = s.logsProducer.ProduceLogEvent(ctx, &logspb.LogEvent{
+				ExecutionId: job.ExecutionId,
+				Timestamp:   x.Log.Timestamp,
+				Stream:      x.Log.Type.String(), 
+				Message:     x.Log.Message,
+			})
+
 			finalOutput.WriteString(x.Log.Message + "\n")
 
 		case *runtimepb.ExecutionResponse_Result:
 			log.Printf("EXEC RESULT [%s]", job.ExecutionId)
 
-			if x.Result.ErrorMessage != "" {
-				return "", fmt.Errorf("runtime error: %s", x.Result.ErrorMessage)
+			if x.Result.ErrorMessage == "timeout" {
+				return "", fmt.Errorf("execution-timeout")
 			}
 
-			return finalOutput.String(), nil // 🔥 STOP HERE (IMPORTANT FIX)
+			if x.Result.ErrorMessage != "" {
+				return "", fmt.Errorf("runtime-error: %s", x.Result.ErrorMessage)
+			}
+
+			_ = s.logsProducer.ProduceLogEvent(ctx, &logspb.LogEvent{
+				ExecutionId: job.ExecutionId,
+				Timestamp:   time.Now().Format(time.RFC3339),
+				Stream:      "RESULT",
+				Message:     fmt.Sprintf("status=%v exitCode=%d", x.Result.Status, x.Result.ExitCode),
+			})
+
+			return finalOutput.String(), nil
 		}
 	}
 
@@ -259,5 +285,23 @@ func isInfraError(err error) bool {
 
 func isRetryable(err error) bool {
 	msg := err.Error()
-	return strings.Contains(msg, "timeout") || strings.Contains(msg, "DeadlineExceeded") || strings.Contains(msg, "connection refused")
+
+	if strings.Contains(msg, "execution-timeout") {
+		return false
+	}
+	if strings.Contains(msg, "runtime-error") {
+		return false
+	}
+
+	if strings.Contains(msg, "DeadlineExceeded") {
+		return true
+	}
+	if strings.Contains(msg, "connection refused") {
+		return true
+	}
+	if strings.Contains(msg, "rpc error") {
+		return true
+	}
+
+	return false
 }

@@ -1,28 +1,29 @@
-﻿// import path from 'node:path';
-// import { fileURLToPath } from 'node:url';
+﻿import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// import grpc from '@grpc/grpc-js';
-// import protoLoader from '@grpc/proto-loader';
+import grpc from '@grpc/grpc-js';
+import protoLoader from '@grpc/proto-loader';
 
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// // const PROTO_PATH = path.resolve(__dirname, '../../../../proto/logs.proto');
-// const PROTO_PATH = process.env.PROTO_PATH || '/proto/logs.proto';
 
-// const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-//   keepCase: true,
-//   longs: String,
-//   enums: String,
-//   defaults: true,
-//   oneofs: true,
-// });
+const PROTO_PATH = path.resolve(__dirname, '../../../../proto/logs.proto');
 
-// const logsProto = grpc.loadPackageDefinition(packageDefinition).veltrix.logs;
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
 
-// const logsClient = new logsProto.LogsService(
-//   process.env.LOGS_GRPC_ADDR || 'logs:50052',
-//   grpc.credentials.createInsecure(),
-// );
+const logsProto = grpc.loadPackageDefinition(packageDefinition).veltrix.logs;
 
-// export default logsClient;
+
+const logsClient = new logsProto.LogsService(
+  process.env.LOGS_GRPC_ADDR || 'logs-service:50053',
+  grpc.credentials.createInsecure(),
+);
+
+export default logsClient;

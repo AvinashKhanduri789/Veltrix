@@ -1,16 +1,7 @@
 package main
 
-import (
-	"log"
-	"veltrix/logs_service/internal/transport/grpc"
+import "veltrix/logs_service/internal/app"
 
-)
-
-func main(){
-	server := grpc.NewGrpcServer(50052)
-
-	log.Println("Starting Logs Service...")
-
-	server.Start()
-
+func main() {
+	app.NewApp().Run()
 }

@@ -7,7 +7,7 @@ import {
   getExecution,
   getExecutionsByFunction,
   replayExecution,
-  // streamExecutionLogs,
+  streamExecutionLogs,
   triggerExecution,
 } from '../controllers/execution.controller.js';
 import {
@@ -23,6 +23,8 @@ executionRouter.post('/:executionId/replay', jwtAuth, validate(executionIdParam,
 executionRouter.post('/:executionId/cancel', jwtAuth, validate(executionIdParam, 'params'), cancelExecution);
 executionRouter.get('/:executionId', jwtAuth, validate(executionIdParam, 'params'), getExecution);
 executionRouter.get('/function/:functionId', jwtAuth, validate(functionIdParam, 'params'), getExecutionsByFunction);
-// executionRouter.get('/:executionId/logs', jwtAuth, validate(executionIdParam, 'params'), streamExecutionLogs);
+executionRouter.get('/:executionId/logs', jwtAuth, validate(executionIdParam, 'params'), streamExecutionLogs);
 
 export { executionRouter };
+
+

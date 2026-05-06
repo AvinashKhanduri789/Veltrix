@@ -5,7 +5,7 @@ import Function from '../../../models/Function.js';
 import FunctionVersion from '../../../models/FunctionVersion.js';
 import { sendError, sendSuccess } from '../../../utils/http/response.util.js';
 import { getPresignedCodeUrl } from '../../../utils/storage/minio.util.js';
-// import logsClient from '../../grpc/logs.client.js';
+import logsClient from '../../grpc/logs.client.js';
 import schedulerClient from '../../grpc/scheduler.client.js';
 
 const activeExecutionLogStreams = new Map();
@@ -301,7 +301,7 @@ export async function getExecution(req, res) {
     }
 
     const execution = await Execution.findById(executionId)
-      .select('_id userId functionId functionVersionId status createdAt startedAt completedAt')
+      .select('_id userId functionId functionVersionId status createdAt startedAt completedAt errorMessage output')
       .lean();
 
     if (!execution) {
@@ -331,10 +331,11 @@ export async function getExecution(req, res) {
         createdAt: execution.createdAt,
         startedAt: execution.startedAt,
         completedAt: execution.completedAt,
+        errorMessage: execution.errorMessage || null,
+        output: execution.output || null,
       },
     });
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error(error);
     return sendError(res, {
       statusCode: 500,
@@ -361,10 +362,9 @@ export async function getExecutionsByFunction(req, res) {
       functionId,
       userId,
     })
-      .select('_id status createdAt startedAt completedAt')
+      .select('_id status createdAt startedAt completedAt errorMessage output')
       .sort({ createdAt: -1 })
       .lean();
-
     return sendSuccess(res, {
       statusCode: 200,
       message: 'Executions fetched successfully',
@@ -375,6 +375,8 @@ export async function getExecutionsByFunction(req, res) {
           createdAt: execution.createdAt,
           startedAt: execution.startedAt,
           completedAt: execution.completedAt,
+          errorMessage: execution.errorMessage,
+          output: execution.output
         })),
       },
     });

@@ -1,10 +1,5 @@
-version: "3.8"
-
 services:
 
-  # =========================
-  # KAFKA
-  # =========================
   kafka:
     image: bitnami/kafka:latest
     container_name: veltrix-kafka
@@ -19,19 +14,17 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - ALLOW_PLAINTEXT_LISTENER=yes
+    networks:
+      - veltrix_net
 
-  # =========================
-  #  REDIS
-  # =========================
   redis:
     image: redis:7
     container_name: veltrix-redis
     ports:
       - "6379:6379"
+    networks:
+      - veltrix_net
 
-  # =========================
-  #  MINIO
-  # =========================
   minio:
     image: minio/minio
     container_name: veltrix-minio
@@ -44,39 +37,83 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    networks:
+      - veltrix_net
 
-  # =========================
-  #  PYTHON RUNTIME
-  # =========================
+  # 🔥 FIXED PYTHON RUNTIME
   python-runtime:
     build:
-      context: ./python-runtime
+      context: ./python-runtime   # ✅ FIXED (separate context)
+      dockerfile: Dockerfile
     container_name: veltrix-python-runtime
-    ports:
-      - "50051:50051"
 
-  # =========================
-  #  WORKER SERVICE
-  # =========================
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /tmp/executions
+
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 100
+
+    networks:
+      - veltrix_net
+
+    restart: unless-stopped
+
+  # 🔥 FIXED NODE RUNTIME (needs root context for proto)
+  node-runtime:
+    build:
+      context: .
+      dockerfile: node-runtime/Dockerfile
+    container_name: veltrix-node-runtime
+
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /tmp/executions
+
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 100
+
+    networks:
+      - veltrix_net
+
+    restart: unless-stopped
+
   worker:
     build:
       context: .
-      dockerfile:  worker_service/Dockerfile
+      dockerfile: worker_service/Dockerfile
     container_name: veltrix-worker
     depends_on:
       - kafka
       - redis
       - minio
       - python-runtime
+      - node-runtime
     environment:
       KAFKA_BROKERS: kafka:9092
       REDIS_ADDR: redis:6379
       MINIO_ENDPOINT: minio:9000
       PYTHON_RUNTIME_ADDR: python-runtime:50051
+      NODE_RUNTIME_ADDR: node-runtime:50052
+    networks:
+      - veltrix_net
 
-  # =========================
-  # SCHEDULER SERVICE
-  # =========================
   scheduler:
     build:
       context: .
@@ -86,19 +123,15 @@ services:
       - kafka
     environment:
       SCHEDULER_GRPC_PORT: 50051
-
-      # USING MONGO ATLAS
       MONGO_URI: "${MONGO_URI}"
       MONGO_DB_NAME: veltrix
-
       KAFKA_BROKERS: kafka:9092
       KAFKA_JOB_TOPIC: execution-jobs
       KAFKA_EVENTS_TOPIC: execution-events
       KAFKA_CONSUMER_GROUP: scheduler-debug
+    networks:
+      - veltrix_net
 
-  # =========================
-  #  GATEWAY
-  # =========================
   gateway:
     build:
       context: .
@@ -112,23 +145,36 @@ services:
       - minio
     environment:
       PORT: 8080
-
-      # USING MONGO ATLAS
       MONGO_URI: "${MONGO_URI}"
-
-      # MinIO
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_USE_SSL: "false"
       MINIO_BUCKET: code-bucket
-
       DISABLE_AUTH: "true"
-
-      # gRPC
       SCHEDULER_GRPC_ADDR: scheduler:50051
       PROTO_PATH: /proto/logs.proto
+    networks:
+      - veltrix_net
+
+  logs-service:
+    build:
+      context: .
+      dockerfile: logs_service/Dockerfile
+    container_name: veltrix-logs
+    depends_on:
+     - kafka
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      LOGS_TOPIC: execution-logs-v2
+      LOGS_GRPC_PORT: 50053
+    networks:
+      - veltrix_net
 
 volumes:
   minio_data:
+
+networks:
+  veltrix_net:
+    driver: bridge

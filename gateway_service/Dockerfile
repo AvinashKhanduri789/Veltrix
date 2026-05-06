@@ -3,7 +3,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY gateway_service/package*.json ./
-RUN npm install --production
+RUN npm ci --only=production
 
 COPY gateway_service/ .
 COPY proto /proto

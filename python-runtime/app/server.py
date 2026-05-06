@@ -5,19 +5,38 @@ import subprocess
 import tempfile
 import shutil
 import time
+import signal
+import resource
 
 import runtime_execution_pb2 as pb2
 import runtime_execution_pb2_grpc as pb2_grpc
 
 
+# -------------------------------
+# Resource Limits
+# -------------------------------
+def apply_limits():
+    resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+    resource.setrlimit(resource.RLIMIT_NPROC, (10, 10))
+
+
+# -------------------------------
+# Workdir
+# -------------------------------
 def create_workdir():
-    return tempfile.mkdtemp(prefix="exec_")
+    path = tempfile.mkdtemp(prefix="exec_")
+    os.chmod(path, 0o700)
+    return path
 
 
 def cleanup_workdir(path):
     shutil.rmtree(path, ignore_errors=True)
 
 
+# -------------------------------
+# Runtime Service
+# -------------------------------
 class RuntimeService(pb2_grpc.RuntimeExecutionServiceServicer):
 
     async def ExecuteExecution(self, request_iterator, context):
@@ -33,6 +52,7 @@ class RuntimeService(pb2_grpc.RuntimeExecutionServiceServicer):
             file_path = os.path.join(workdir, "main.py")
 
             collected_output = []
+            MAX_OUTPUT_LINES = 1000  # prevent log explosion
 
             try:
                 # Write user code
@@ -46,11 +66,11 @@ class RuntimeService(pb2_grpc.RuntimeExecutionServiceServicer):
                     text=True,
                     cwd=workdir,
                     bufsize=1,
+                    preexec_fn=lambda: (os.setsid(), apply_limits())
                 )
 
                 start_time = time.time()
 
-                # Stream logs line-by-line
                 while True:
                     if process.stdout is None:
                         break
@@ -62,27 +82,33 @@ class RuntimeService(pb2_grpc.RuntimeExecutionServiceServicer):
 
                     if line:
                         line = line.rstrip()
-                        collected_output.append(line)
+
+                        if len(collected_output) < MAX_OUTPUT_LINES:
+                            collected_output.append(line)
 
                         yield pb2.ExecutionResponse(
                             log=pb2.ExecutionLog(
                                 execution_id=start.execution_id,
-                                message=line,
+                                message=line[:1000],  # truncate
                                 type=pb2.STDOUT,
                                 timestamp=str(time.time())
                             )
                         )
 
-                    # Timeout check (manual safeguard)
+                    # HARD timeout enforcement
                     if time.time() - start_time > start.timeout_seconds:
-                        process.kill()
+                        try:
+                            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                            await asyncio.sleep(1)
+                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        except Exception:
+                            pass
                         raise subprocess.TimeoutExpired(cmd="python", timeout=start.timeout_seconds)
 
                 process.wait()
 
                 output = "\n".join(collected_output)
 
-                # Final result
                 yield pb2.ExecutionResponse(
                     result=pb2.ExecutionResult(
                         execution_id=start.execution_id,
@@ -123,6 +149,9 @@ class RuntimeService(pb2_grpc.RuntimeExecutionServiceServicer):
                 cleanup_workdir(workdir)
 
 
+# -------------------------------
+# Server bootstrap
+# -------------------------------
 async def serve():
     server = grpc.aio.server()
     pb2_grpc.add_RuntimeExecutionServiceServicer_to_server(

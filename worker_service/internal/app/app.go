@@ -41,7 +41,7 @@ func (a *App) Run() {
 	executionTopic := "execution-jobs"
 	retryTopic := "execution-jobs-retry"
 	dlqTopic := "execution-dlq"
-	logsTopic := "execution-logs"
+	logsTopic := "execution-logs-v2"
 
 	// ================= PRODUCERS =================
 
@@ -59,11 +59,11 @@ func (a *App) Run() {
 	// ================= RUNTIME =================
 
 	pythonConn := mustDial(cfg.PythonRuntimeAddr)
-	// nodeConn := mustDial("localhost:50052")
+	nodeConn := mustDial(cfg.NodeRuntimeAddr)
 
 	router := runtime.NewRuntimeRouter(map[string]runtimepb.RuntimeExecutionServiceClient{
 		"python-3.10": runtimepb.NewRuntimeExecutionServiceClient(pythonConn),
-		// "node":   runtimepb.NewRuntimeExecutionServiceClient(nodeConn),
+		"node-20":   runtimepb.NewRuntimeExecutionServiceClient(nodeConn),
 	})
 
 	// ================= FETCHER =================

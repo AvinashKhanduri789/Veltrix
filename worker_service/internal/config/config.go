@@ -7,6 +7,7 @@ type Config struct {
 	RedisAddr          string
 	MinioEndpoint      string
 	PythonRuntimeAddr  string
+	NodeRuntimeAddr	   string
 }
 
 func Load() *Config {
@@ -15,6 +16,7 @@ func Load() *Config {
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		MinioEndpoint:     getEnv("MINIO_ENDPOINT", "localhost:9000"),
 		PythonRuntimeAddr: getEnv("PYTHON_RUNTIME_ADDR", "localhost:50051"),
+		NodeRuntimeAddr: getEnv("NODE_RUNTIME_ADDR","localhost:50052"),
 	}
 }
 

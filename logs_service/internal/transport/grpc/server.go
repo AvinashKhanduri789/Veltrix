@@ -3,35 +3,53 @@ package grpc
 import (
 	"log"
 	"net"
-	pb "veltrix/proto/logspb"
+
 	"google.golang.org/grpc"
+
+	"veltrix/logs_service/internal/services"
+	logspb "veltrix/proto/logspb"
 )
 
-type GrpcServer struct{
-	port int
+type Server struct {
+	logspb.UnimplementedLogsServiceServer
+	streamService *service.LogStreamService
 }
 
-func NewGrpcServer(port int)(*GrpcServer){
-	return &GrpcServer{
-		port: port,
+func NewServer(svc *service.LogStreamService) *Server {
+	return &Server{streamService: svc}
+}
+
+func (s *Server) StreamExecutionLogs(req *logspb.StreamLogsRequest, stream logspb.LogsService_StreamExecutionLogsServer) error {
+
+	ch := s.streamService.Subscribe(req.ExecutionId)
+	defer s.streamService.Unsubscribe(req.ExecutionId, ch)
+
+	for {
+		select {
+		case logEvent, ok := <-ch:
+			if !ok {
+				return nil
+			}
+
+			if err := stream.Send(logEvent); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return nil
+		}
 	}
 }
 
-
-func (s *GrpcServer) Start() {
-
-	lis, err := net.Listen("tcp", ":50052")
+func StartGRPCServer(port string, svc *service.LogStreamService) {
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
+	logspb.RegisterLogsServiceServer(grpcServer, NewServer(svc))
 
-	handler := NewLogsHandler()
-
-	pb.RegisterLogsServiceServer(grpcServer, handler)
-
-	log.Println("Log gRPC server running on port 50052")
+	log.Printf("🚀 Logs service running on %s", port)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

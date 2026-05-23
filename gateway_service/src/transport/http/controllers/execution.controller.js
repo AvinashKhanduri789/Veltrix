@@ -9,6 +9,19 @@ import logsClient from '../../grpc/logs.client.js';
 import schedulerClient from '../../grpc/scheduler.client.js';
 
 const activeExecutionLogStreams = new Map();
+const DEMO_EXECUTION_DISABLED_MESSAGE = 'Execution infrastructure is disabled in the public demo deployment.';
+
+function isDemoModeEnabled() {
+  return process.env.DEMO_MODE === 'true';
+}
+
+function sendDemoExecutionDisabled(res) {
+  return sendError(res, {
+    statusCode: 503,
+    message: DEMO_EXECUTION_DISABLED_MESSAGE,
+    errorCode: 'DEMO_EXECUTION_DISABLED',
+  });
+}
 
 function triggerExecutionRPC(payload) {
   return new Promise((resolve, reject) => {
@@ -56,6 +69,10 @@ function streamExecutionLogsRPC(payload) {
 
 export async function triggerExecution(req, res) {
   try {
+    if (isDemoModeEnabled()) {
+      return sendDemoExecutionDisabled(res);
+    }
+
     const { functionId } = req.params;
     const { inputPayload = {} } = req.body;
     const userId = req.user?.id || req.auth?.userId;
@@ -140,6 +157,10 @@ export async function triggerExecution(req, res) {
 
 export async function replayExecution(req, res) {
   try {
+    if (isDemoModeEnabled()) {
+      return sendDemoExecutionDisabled(res);
+    }
+
     const { executionId } = req.params;
     const userId = req.user?.id || req.auth?.userId;
     const overrideInputPayload = req.body?.inputPayload;
@@ -214,6 +235,10 @@ export async function replayExecution(req, res) {
 
 export async function cancelExecution(req, res) {
   try {
+    if (isDemoModeEnabled()) {
+      return sendDemoExecutionDisabled(res);
+    }
+
     const { executionId } = req.params;
     const userId = req.user?.id || req.auth?.userId;
 

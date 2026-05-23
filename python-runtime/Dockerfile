@@ -6,25 +6,44 @@ FROM python:3.11-slim
 RUN useradd -m -u 10001 executor
 
 # -------------------------------
-# Set working dir
+# Set working directory
 # -------------------------------
 WORKDIR /app
 
 # -------------------------------
-# Install dependencies
+# System optimizations
 # -------------------------------
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=1
 
 # -------------------------------
-# Copy app
+# Install common execution libs
+# -------------------------------
+RUN pip install \
+    requests \
+    aiohttp \
+    pydantic \
+    numpy \
+    pandas
+
+# -------------------------------
+# Install runtime server deps
+# -------------------------------
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# -------------------------------
+# Copy runtime server
 # -------------------------------
 COPY . .
 
 # -------------------------------
-# Create execution directory root
+# Execution workspace
 # -------------------------------
-RUN mkdir -p /tmp/executions && chown -R executor:executor /tmp/executions
+RUN mkdir -p /tmp/executions && \
+    chown -R executor:executor /tmp/executions && \
+    chmod 700 /tmp/executions
 
 # -------------------------------
 # Switch to non-root user
@@ -32,17 +51,11 @@ RUN mkdir -p /tmp/executions && chown -R executor:executor /tmp/executions
 USER executor
 
 # -------------------------------
-# Python runtime optimizations
-# -------------------------------
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# -------------------------------
 # Expose gRPC port
 # -------------------------------
 EXPOSE 50051
 
 # -------------------------------
-# Start server
+# Start runtime server
 # -------------------------------
 CMD ["python", "-m", "app.server"]

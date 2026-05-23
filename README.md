@@ -11,6 +11,28 @@ The platform supports:
 
 Veltrix is built as an infrastructure engineering project inspired by serverless and worker-based systems. The focus is on distributed systems design, control-plane/data-plane separation, event-driven communication, and runtime isolation.
 
+## DEMO DEPLOYMENT NOTE
+
+This public deployment is a lightweight showcase version of Veltrix.
+
+The complete distributed infrastructure including Kafka, Scheduler, Worker Services, Runtime Containers, and orchestration pipelines was fully implemented and tested locally.
+
+Because the full infrastructure requires significant cloud resources, live execution features are disabled in the public demo deployment.
+
+However, the complete architecture and implementation remain available in the source code repository.
+
+The `main` branch preserves the complete distributed execution platform. The `demo-deployment` branch keeps the same source code and adds a transparent demo gate around infrastructure-heavy execution actions. Function upload, function browsing, execution history, execution details, persisted results, and architecture review surfaces remain available for project review, copyright proof, portfolio showcase, and recruiter demonstration.
+
+When `DEMO_MODE=true` is set on the Gateway, execution mutation endpoints return HTTP 503 with:
+
+```json
+{
+  "message": "Execution infrastructure is disabled in the public demo deployment."
+}
+```
+
+This does not remove the execution APIs or distributed services. It prevents the public hosted version from attempting scheduler orchestration, Kafka processing, worker execution, or runtime container spawning without the full local infrastructure.
+
 ## Architecture
 
 ![Veltrix System Architecture](./architecture_digrams/ArchitectureDigram(system%20design).png)
@@ -64,6 +86,8 @@ Supporting systems:
 - MongoDB for metadata/state
 - MinIO for code storage
 - Redis for worker-side code cache
+
+In the demo deployment, the frontend still exposes the architecture page at `/architecture` and clearly labels the app as demo mode. The backend keeps read-side execution endpoints available so previous execution records, outputs, and logs can be inspected.
 
 ## Core Services
 
@@ -241,6 +265,42 @@ Use this checklist to start Veltrix locally in a stable order.
 - `execution-jobs` receives scheduler jobs
 - `execution-events` updates scheduler execution states
 - `execution-logs` feeds logs service streams
+
+## Demo Deployment Run
+
+The lightweight demo compose file starts only the local services needed for hosted review of the Gateway-backed demo surfaces. MongoDB should still use MongoDB Atlas through `MONGO_URI`.
+
+```bash
+docker compose -f docker-compose.demo.yml up -d
+```
+
+It intentionally does not start local MongoDB, Kafka, Scheduler, Worker Services, Redis, Logs Service, or Runtime Containers. The full `docker-compose.yml` remains available for the complete distributed local deployment.
+
+Before starting the demo compose file, set your Atlas connection string:
+
+```bash
+export MONGO_URI="your-mongodb-atlas-uri"
+```
+
+PowerShell:
+
+```powershell
+$env:MONGO_URI="your-mongodb-atlas-uri"
+```
+
+For a public frontend build, keep demo mode enabled:
+
+```bash
+VITE_DEMO_MODE=true npm run build
+```
+
+For the Gateway demo deployment, set:
+
+```bash
+DEMO_MODE=true
+```
+
+Execution trigger, replay, and cancel requests will be disabled cleanly. Function management and read-only execution history endpoints continue to demonstrate persistence and prior local execution records.
 
 ## Quick Start (Copy-Paste)
 

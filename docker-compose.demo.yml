@@ -1,0 +1,62 @@
+services:
+  minio:
+    image: minio/minio
+    container_name: veltrix-demo-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - demo_minio_data:/data
+    networks:
+      - veltrix_demo_net
+
+  minio-init:
+    image: minio/mc
+    container_name: veltrix-demo-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set veltrix-demo http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing veltrix-demo/code-bucket
+      "
+    networks:
+      - veltrix_demo_net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway_service/Dockerfile
+    container_name: veltrix-demo-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - minio
+      - minio-init
+    environment:
+      PORT: 8080
+      DEMO_MODE: "true"
+      MONGO_URI: "${MONGO_URI}"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET: code-bucket
+      DISABLE_AUTH: "true"
+      SCHEDULER_GRPC_ADDR: scheduler:50051
+      LOGS_GRPC_ADDR: logs-service:50053
+      PROTO_PATH: /proto/logs.proto
+    networks:
+      - veltrix_demo_net
+
+volumes:
+  demo_minio_data:
+
+networks:
+  veltrix_demo_net:
+    driver: bridge

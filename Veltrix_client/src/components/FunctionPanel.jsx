@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Upload, Play, Trash2, FileCode2, Loader2, Code2, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+import { Upload, Play, Trash2, FileCode2, Loader2, Code2, ChevronDown, ShieldOff } from 'lucide-react';
 import { api } from '../utils/api';
 
 export default function FunctionPanel({
@@ -7,15 +7,14 @@ export default function FunctionPanel({
   fetchFunctions,
   onFunctionSelect,
   selectedFunctionId,
-  onTriggerExecution
+  onTriggerExecution,
+  isDemoMode = false
 }) {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('python');
-  const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [runningFnId, setRunningFnId] = useState(null);
-  const fileInputRef = useRef(null);
 
   const handleFileSelectAndUpload = async (e) => {
     setUploadError(null);
@@ -59,6 +58,11 @@ export default function FunctionPanel({
   const handleRun = async (e, fn) => {
     e.stopPropagation();
 
+    if (isDemoMode) {
+      await onTriggerExecution(fn.functionId || fn.id || fn._id, {});
+      return;
+    }
+
     const payloadStr = prompt("Enter input payload (JSON) or leave empty:", "{}");
     if (payloadStr === null) return; // User cancelled
 
@@ -66,7 +70,7 @@ export default function FunctionPanel({
     if (payloadStr.trim()) {
       try {
         payloadObj = JSON.parse(payloadStr);
-      } catch (err) {
+      } catch {
         alert("Invalid JSON payload. Please enter valid JSON.");
         return;
       }
@@ -90,6 +94,12 @@ export default function FunctionPanel({
         <Code2 size={20} className="text-gray-400" />
         Functions
       </h2>
+      {isDemoMode && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium leading-5 text-amber-900">
+          Execution Disabled In Demo Deployment. Uploaded functions and historical execution
+          records remain available for review.
+        </div>
+      )}
 
       {/* Create Form */}
       <form onSubmit={(e) => e.preventDefault()} className="mb-8 bg-gray-50/50 p-4 rounded-xl border border-gray-100/80">
@@ -114,8 +124,8 @@ export default function FunctionPanel({
                 disabled={isUploading}
                 className="appearance-none w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-gray-300 disabled:opacity-50 transition-all hover:border-gray-300 cursor-pointer"
               >
-                <option value="python-3.10">Python 3.10</option>
-                <option value="node-20">Node.js 20</option>
+                <option value="python">Python 3.10</option>
+                <option value="node">Node.js 20</option>
               </select>
               <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
                 <ChevronDown size={16} />
@@ -185,10 +195,21 @@ export default function FunctionPanel({
                       <button
                         onClick={(e) => handleRun(e, fn)}
                         disabled={isRunning}
-                        className="p-1.5 text-gray-500 hover:text-black hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Run"
+                        className={`flex items-center gap-1.5 rounded-lg p-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          isDemoMode
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'text-gray-500 hover:bg-gray-200 hover:text-black'
+                        }`}
+                        title={isDemoMode ? 'Execution Disabled In Demo Deployment' : 'Run'}
                       >
-                        {isRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                        {isRunning ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : isDemoMode ? (
+                          <ShieldOff size={16} />
+                        ) : (
+                          <Play size={16} />
+                        )}
+                        {isDemoMode && <span className="hidden xl:inline">Execution Disabled In Demo Deployment</span>}
                       </button>
                       <button
                         onClick={(e) => handleDelete(e, fnId)}

@@ -10,14 +10,7 @@ class APIError extends Error {
 async function handleResponse(response) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    console.error("Backend Error Response:", errorData);
-    
-    // Sometimes validation errors hide details inside errorData.errors or errorData.details
-    let errorMessage = errorData?.message;
-    if (errorData?.details) errorMessage += " - " + JSON.stringify(errorData.details);
-    if (errorData?.errors) errorMessage += " - " + JSON.stringify(errorData.errors);
-    
-    throw new APIError(errorMessage || response.statusText, response.status);
+    throw new APIError(errorData?.message || response.statusText, response.status);
   }
   return response.json();
 }
@@ -28,6 +21,8 @@ export const api = {
     formData.append("name", name);
     formData.append("language", language);
     formData.append("file", file);
+
+    console.log("formData in create fucntion is : ", formData);
 
     const response = await fetch(`${BASE_URL}/functions`, {
       method: "POST",

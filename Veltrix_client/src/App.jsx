@@ -3,7 +3,11 @@ import Header from './components/Header';
 import FunctionPanel from './components/FunctionPanel';
 import ExecutionList from './components/ExecutionList';
 import ExecutionDetails from './components/ExecutionDetails';
+import DemoBanner from './components/DemoBanner';
+import ArchitecturePage from './components/ArchitecturePage';
 import { api } from './utils/api';
+
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false';
 
 function App() {
   const [functions, setFunctions] = useState([]);
@@ -11,8 +15,23 @@ function App() {
   const [selectedFunctionId, setSelectedFunctionId] = useState(null);
   const [selectedExecutionId, setSelectedExecutionId] = useState(null);
   const [selectedExecutionData, setSelectedExecutionData] = useState(null);
+  const [demoMessage, setDemoMessage] = useState(null);
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   const pollingIntervalRef = useRef(null);
+
+  useEffect(() => {
+    const handlePopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = useCallback((path) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    setCurrentPath(path);
+  }, []);
 
   const fetchFunctions = useCallback(async () => {
     try {
@@ -26,6 +45,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFunctions();
   }, [fetchFunctions]);
 
@@ -66,6 +86,14 @@ function App() {
   }, [fetchExecutions]);
 
   const handleTriggerExecution = async (functionId, payload) => {
+    if (DEMO_MODE) {
+      setDemoMessage({
+        title: 'Execution is disabled in the public demo deployment.',
+        body: 'The complete distributed execution pipeline was successfully implemented and demonstrated locally. This hosted version is intended only for architecture demonstration, project review, and proof of implementation.',
+      });
+      return;
+    }
+
     console.log("handleTriggerExecution", functionId, payload);
     const res = await api.triggerExecution(functionId, payload);
     const triggerData = res.data?.execution || res.data || res;
@@ -90,6 +118,7 @@ function App() {
     }
 
     if (!selectedExecutionId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedExecutionData(null);
       return;
     }
@@ -134,43 +163,60 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center">
-      <div className="w-full max-w-[1200px] flex flex-col h-screen p-4 md:p-8">
-        <Header />
+      <div className="w-full max-w-[1200px] flex flex-col min-h-screen p-4 md:p-8">
+        <Header currentPath={currentPath} onNavigate={navigate} />
+        {DEMO_MODE && <DemoBanner />}
 
-        <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
-          {/* Left Column: Functions Panel */}
-          <div className="w-full md:w-[350px] flex-shrink-0">
-            <FunctionPanel
-              functions={functions}
-              fetchFunctions={fetchFunctions}
-              onFunctionSelect={handleFunctionSelect}
-              selectedFunctionId={selectedFunctionId}
-              onTriggerExecution={handleTriggerExecution}
-            />
+        {currentPath === '/architecture' ? (
+          <ArchitecturePage />
+        ) : (
+          <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+            <div className="w-full md:w-[350px] flex-shrink-0">
+              <FunctionPanel
+                functions={functions}
+                fetchFunctions={fetchFunctions}
+                onFunctionSelect={handleFunctionSelect}
+                selectedFunctionId={selectedFunctionId}
+                onTriggerExecution={handleTriggerExecution}
+                isDemoMode={DEMO_MODE}
+              />
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 min-w-0">
+              <div className="w-full md:w-[300px] flex-shrink-0">
+                <ExecutionList
+                  executions={executions}
+                  selectedExecutionId={selectedExecutionId}
+                  onSelectExecution={setSelectedExecutionId}
+                  selectedFunctionId={selectedFunctionId}
+                />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <ExecutionDetails
+                  execution={selectedExecutionData}
+                  selectedFunctionId={selectedFunctionId}
+                />
+              </div>
+            </div>
           </div>
-
-          {/* Right Column: Executions Panel (Split into List and Details) */}
-          <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 min-w-0">
-            {/* Executions List */}
-            <div className="w-full md:w-[300px] flex-shrink-0">
-              <ExecutionList
-                executions={executions}
-                selectedExecutionId={selectedExecutionId}
-                onSelectExecution={setSelectedExecutionId}
-                selectedFunctionId={selectedFunctionId}
-              />
-            </div>
-
-            {/* Execution Details */}
-            <div className="flex-1 min-w-0">
-              <ExecutionDetails
-                execution={selectedExecutionData}
-                selectedFunctionId={selectedFunctionId}
-              />
-            </div>
+        )}
+      </div>
+      {demoMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-gray-950">{demoMessage.title}</h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">{demoMessage.body}</p>
+            <button
+              type="button"
+              onClick={() => setDemoMessage(null)}
+              className="mt-5 w-full rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+            >
+              I understand
+            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function LogsViewer({ executionId, status }) {
       try {
         const data = JSON.parse(event.data);
         setLogs(prev => [...prev, { level: 'STDERR', message: data.message }]);
-      } catch (err) {
+      } catch {
         setLogs(prev => [...prev, { level: 'STDERR', message: 'Log stream failed' }]);
       }
       eventSource.close();

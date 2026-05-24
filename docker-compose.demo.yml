@@ -19,7 +19,7 @@ services:
     container_name: veltrix-demo-minio-init
     depends_on:
       - minio
-    entrypoint: >
+    entrypoint: 
       /bin/sh -c "
       mc alias set veltrix-demo http://minio:9000 minioadmin minioadmin &&
       mc mb --ignore-existing veltrix-demo/code-bucket

@@ -24,7 +24,7 @@ app.use(
   cors({
     origin: [
       'http://localhost:5173',
-      'https://veltrix-24s3y6rt2-avinashs-projects-2fa6fd68.vercel.app'
+      'https://veltrix-weld.vercel.app'
     ],
     credentials: true,
   })

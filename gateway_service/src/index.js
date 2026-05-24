@@ -22,8 +22,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: 'http://localhost:5173', 
-    credentials: true, 
+    origin: [
+      'http://localhost:5173',
+      'https://veltrix-24s3y6rt2-avinashs-projects-2fa6fd68.vercel.app'
+    ],
+    credentials: true,
   })
 );
 
